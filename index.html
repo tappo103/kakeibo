@@ -163,7 +163,7 @@
             `).join('') || "<p class='text-center text-gray-300 py-10'>データがありません</p>";
         }
 
-        function showDetail(cat) {
+function showDetail(cat) {
             const year = displayDate.getFullYear();
             const month = displayDate.getMonth();
             const filtered = rawData.slice(1).filter(row => {
@@ -173,12 +173,18 @@
 
             document.getElementById('modal-title').innerText = cat;
             document.getElementById('modal-list').innerHTML = filtered.map(row => `
-                <div class="flex justify-between items-start border-b border-gray-50 pb-2">
-                    <div>
-                        <p class="text-[10px] text-gray-400">${new Date(row[0]).toLocaleDateString()}</p>
-                        <p class="text-sm font-medium">${row[3] || '（メモなし）'}</p>
+                <div class="border-b border-gray-50 pb-3">
+                    <div class="flex justify-between items-start mb-1">
+                        <div>
+                            <p class="text-[10px] text-gray-400">${new Date(row[0]).toLocaleDateString()}</p>
+                            <p class="text-sm font-medium">${row[3] || '（メモなし）'}</p>
+                        </div>
+                        <p class="font-bold text-sm">¥${Math.abs(row[2]).toLocaleString()}</p>
                     </div>
-                    <p class="font-bold ${Number(row[2]) > 0 ? 'text-blue-500' : 'text-gray-700'}">¥${Math.abs(row[2]).toLocaleString()}</p>
+                    <div class="flex justify-end space-x-4 text-[10px] font-bold">
+                        <button onclick="editEntry('${row[6]}', '${row[0]}', '${row[1]}', '${row[2]}', '${row[3]}', '${row[4]}')" class="text-blue-500">編集</button>
+                        <button onclick="deleteEntry('${row[6]}')" class="text-red-400">削除</button>
+                    </div>
                 </div>
             `).join('');
             document.getElementById('modal-detail').classList.remove('hidden');
@@ -227,6 +233,32 @@
                 const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(data) });
                 if (res.ok) alert("登録しました！");
             } catch (e) { alert("登録失敗"); }
+        }
+
+        // 追加した関数
+        async function deleteEntry(id) {
+            if (!confirm("この項目を削除しますか？")) return;
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'delete', id: id })
+                });
+                if (res.ok) {
+                    alert("削除しました");
+                    closeModal();
+                    fetchAndRenderReport();
+                }
+            } catch (e) { alert("削除に失敗しました"); }
+        }
+
+        function editEntry(id, date, cat, amt, memo, type) {
+            showView('input');
+            document.getElementById('date').value = new Date(date).toISOString().split('T')[0];
+            document.getElementById('amount').value = Math.abs(amt);
+            document.getElementById('memo').value = memo;
+            setType(type);
+            alert("値を修正して、再度カテゴリーをタップして登録してください。\n※古いデータは「削除」ボタンで消してください。");
+            closeModal();
         }
     </script>
 </body>
