@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-title" content="家計簿">
+    <meta name="application-name" content="家計簿">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    
+    <title>家計簿</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { -webkit-touch-callout: none; -webkit-user-select: none; }
+        .category-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans pb-24">
+
+    <div class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="text-center py-2 border-b border-gray-50">
+            <h1 class="text-sm font-bold text-gray-600">家計簿</h1>
+        </div>
+        <div class="flex justify-center space-x-4 p-4">
+            <button id="type-expense" onclick="setType('支出')" class="px-8 py-2 rounded-full bg-red-100 text-red-600 font-bold transition-all">支出</button>
+            <button id="type-income" onclick="setType('収入')" class="px-8 py-2 rounded-full bg-gray-100 text-gray-400 font-bold transition-all">収入</button>
+        </div>
+    </div>
+
+    <div id="input-view" class="p-4 space-y-6">
+        <div class="bg-white p-6 rounded-2xl shadow-sm">
+            <label class="text-[10px] text-gray-400 block mb-1 uppercase tracking-wider">Amount</label>
+            <div class="flex items-end justify-between border-b border-gray-100 pb-2">
+                <span id="currency-unit" class="text-2xl font-bold text-red-400 mr-2">¥</span>
+                <input type="number" id="amount" inputmode="numeric" placeholder="0" class="w-full text-4xl font-bold outline-none text-right bg-transparent">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+            <div class="bg-white p-3 rounded-xl shadow-sm">
+                <label class="text-[10px] text-gray-400 block mb-1">日付</label>
+                <input type="date" id="date" class="w-full text-sm outline-none bg-transparent font-medium">
+            </div>
+            <div class="bg-white p-3 rounded-xl shadow-sm">
+                <label class="text-[10px] text-gray-400 block mb-1">メモ</label>
+                <input type="text" id="memo" placeholder="詳細を入力" class="w-full text-sm outline-none bg-transparent">
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <div class="flex space-x-2 overflow-x-auto pb-1 no-scrollbar" id="category-groups">
+                </div>
+            <div id="category-list" class="category-grid">
+                </div>
+        </div>
+    </div>
+
+    <div class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <button onclick="location.reload()" class="flex flex-col items-center text-blue-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <span class="text-[10px] font-bold mt-1">入力</span>
+        </button>
+        <button onclick="alert('レポート機能はデータが溜まってから実装します！')" class="flex flex-col items-center text-gray-300">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span class="text-[10px] font-bold mt-1">レポート</span>
+        </button>
+    </div>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbyFggP2FTqC28vlUJVB3LARvZd64XF5qvuZfxkGbiAoD7pT7AX1Spyr_s3iPyCKjdJCEw/exec";
+        
+        // カテゴリー定義
+        const expenseCategories = [
+            "食費(毎変)","日用品(毎変)","交通費(毎変)","趣味·娯楽(毎変)","教養・教育(毎変)","衣服・美容(毎変)","健康・医療(毎変)","水道光熱費(毎変)","交際費(毎変)","経費(毎変)","自動車(毎変)",
+            "特別な支出(不変)","趣味・娯楽(不変)","健康・医療(不変)","衣服・美容(不変)","家具・家電(不変)","住宅(不変)","経費(不変)","教養・教育(不変)","自動車(不変)",
+            "サブスク費(毎固)","通信費(毎固)","住宅(毎固)","保険(毎固)","教養・教育(毎固)","自動車(毎固)","経費(毎固)",
+            "健康・医療(不固)","自動車(不固)","住宅(不固)","サブスク費(不固)","経費(不固)"
+        ];
+        const incomeCategories = ["給料", "副業", "その他"];
+
+        let currentType = "支出";
+
+        window.onload = () => {
+            document.getElementById('date').valueAsDate = new Date();
+            updateUI();
+        };
+
+        function setType(type) {
+            currentType = type;
+            updateUI();
+        }
+
+        function updateUI() {
+            const isExp = currentType === "支出";
+            // ボタンの色切り替え
+            document.getElementById('type-expense').className = isExp ? "px-8 py-2 rounded-full bg-red-100 text-red-600 font-bold transition-all" : "px-8 py-2 rounded-full bg-gray-100 text-gray-400 font-bold transition-all";
+            document.getElementById('type-income').className = !isExp ? "px-8 py-2 rounded-full bg-blue-100 text-blue-600 font-bold transition-all" : "px-8 py-2 rounded-full bg-gray-100 text-gray-400 font-bold transition-all";
+            // 通貨記号の色切り替え
+            document.getElementById('currency-unit').className = isExp ? "text-2xl font-bold text-red-400 mr-2" : "text-2xl font-bold text-blue-400 mr-2";
+
+            if (isExp) {
+                renderCategoryGroups();
+                renderCategories("毎変"); // デフォルトで毎変を表示
+            } else {
+                document.getElementById('category-groups').innerHTML = ""; // 収入時はグループ不要
+                renderIncomeCategories();
+            }
+        }
+
+        function renderCategoryGroups() {
+            const groups = ["毎変", "不変", "毎固", "不固"];
+            const container = document.getElementById('category-groups');
+            container.innerHTML = groups.map(g => `
+                <button onclick="renderCategories('${g}')" class="whitespace-nowrap px-5 py-2 rounded-full bg-white border border-gray-100 shadow-sm text-xs font-bold text-gray-500 active:bg-gray-800 active:text-white transition-all">
+                    ${g}
+                </button>
+            `).join('');
+        }
+
+        function renderCategories(filter) {
+            const container = document.getElementById('category-list');
+            const filtered = expenseCategories.filter(c => c.includes(filter));
+            container.innerHTML = filtered.map(c => `
+                <button onclick="register('${c}')" class="p-3 bg-white border border-gray-50 rounded-2xl text-[11px] font-bold text-gray-700 shadow-sm active:bg-red-500 active:text-white active:scale-95 transition-all">
+                    ${c.replace(`(${filter})`, '')}
+                </button>
+            `).join('');
+        }
+
+        function renderIncomeCategories() {
+            const container = document.getElementById('category-list');
+            container.innerHTML = incomeCategories.map(c => `
+                <button onclick="register('${c}')" class="p-3 bg-white border border-gray-50 rounded-2xl text-[11px] font-bold text-gray-700 shadow-sm active:bg-blue-500 active:text-white active:scale-95 transition-all">
+                    ${c}
+                </button>
+            `).join('');
+        }
+
+        async function register(category) {
+            const amountInput = document.getElementById('amount');
+            const memoInput = document.getElementById('memo');
+            const amount = amountInput.value;
+            
+            if (!amount) { alert("金額を入力してください"); return; }
+
+            const data = {
+                date: document.getElementById('date').value.replace(/-/g, '/'),
+                category: category,
+                amount: currentType === "支出" ? -Math.abs(amount) : Math.abs(amount),
+                memo: memoInput.value,
+                type: currentType,
+                isFixed: category.includes("固") ? 1 : 0
+            };
+
+            // UI即時リセット
+            amountInput.value = "";
+            memoInput.value = "";
+            alert(`登録中: ${category}...`);
+
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                if (res.ok) {
+                    alert("「" + category + "」を登録しました");
+                }
+            } catch (e) {
+                alert("登録に失敗しました。");
+            }
+        }
+    </script>
+</body>
+</html>
