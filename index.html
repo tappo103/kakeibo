@@ -786,6 +786,31 @@
         }
         @keyframes dspin { to { transform: rotate(360deg); } }
         .dash-loading-txt { font-size: 13px; }
+
+        /* dash filter chip */
+        .dash-filter-row {
+            display: flex;
+            justify-content: flex-end;
+            padding: 6px 0 2px;
+        }
+        .dash-filter-chip {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 12px;
+            border-radius: 99px;
+            border: 1.5px solid var(--border);
+            background: var(--surface2);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.18s;
+            letter-spacing: 0.02em;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .dash-filter-chip.active {
+            background: var(--text-primary);
+            color: #fff;
+            border-color: var(--text-primary);
+        }
     </style>
 </head>
 <body>
@@ -877,6 +902,10 @@
                     <span class="dsw-track"></span>
                 </label>
             </div>
+        </div>
+        <!-- 除外フィルター -->
+        <div class="dash-filter-row">
+            <button id="dashExcBtn" onclick="dashToggleExc()" class="dash-filter-chip">経費・副業除く</button>
         </div>
         <!-- サマリーカード -->
         <div class="summary-cards" id="dash-summary">
@@ -1276,20 +1305,21 @@ let DASH_EXP  = [], DASH_INC  = [];
 let dashYM    = '';
 let dashTab   = 'all';
 let dashCum   = false;
+let dashExcludeKeihi = false;
 let dashCollapseState = {};
 let dashLoaded = false;
 
 const D_CLS_ORDER = ['毎変','毎固','不変','不固'];
 const D_CLS_COLOR = { '毎変':'#C0392B', '毎固':'#2563A8', '不変':'#B7641A', '不固':'#6B3FA0' };
 const D_CLS_GRAD  = {
-    '毎変': ['#F5D5D0','#C0392B'],
-    '毎固': ['#D0DEEF','#2563A8'],
-    '不変': ['#F5E6D0','#B7641A'],
-    '不固': ['#EAD8F5','#6B3FA0'],
+    '毎変': ['#C0392B','#F5D5D0'],
+    '毎固': ['#2563A8','#D0DEEF'],
+    '不変': ['#B7641A','#F5E6D0'],
+    '不固': ['#6B3FA0','#EAD8F5'],
 };
 const D_KEI_COLOR = '#3D6B73';
-const D_KEI_GRAD  = ['#D0E8EA','#3D6B73'];
-const D_INC_GRAD  = ['#C8EDD8','#1A7A4A'];
+const D_KEI_GRAD  = ['#3D6B73','#D0E8EA'];
+const D_INC_GRAD  = ['#1A7A4A','#C8EDD8'];
 
 /* 初期化（初回のみAPI呼び出し） */
 async function initDashboard() {
@@ -1418,15 +1448,37 @@ function dashRender() {
     const totCurBal = totCurInc - totCurExp;
     const totPrvBal = totPrvInc - totPrvExp;
 
+    /* 経費マップ（除外計算に必要なため先に算出） */
+    const curKeiCls = dSumGroup(curExpKei,'class');
+    const prvKeiCls = dSumGroup(prvExpKei,'class');
+    const totCurKei = Object.values(curKeiCls).reduce((s,v)=>s+v,0);
+    const totPrvKei = Object.values(prvKeiCls).reduce((s,v)=>s+v,0);
+    const maxKei = Math.max(...Object.values(curKeiCls),1);
+
+    /* 収入マップ */
+    const curIncType = dSumGroup(curInc,'type');
+    const prvIncType = dSumGroup(prvInc,'type');
+    const maxInc = Math.max(...Object.values(curIncType),1);
+
+    /* 除外フィルター適用後の表示値 */
+    const excFukuCur = dashExcludeKeihi ? (curIncType['副業']||0) : 0;
+    const excFukuPrv = dashExcludeKeihi ? (prvIncType['副業']||0) : 0;
+    const dispCurInc = totCurInc - excFukuCur;
+    const dispPrvInc = totPrvInc - excFukuPrv;
+    const dispCurExp = dashExcludeKeihi ? totCurExp - totCurKei : totCurExp;
+    const dispPrvExp = dashExcludeKeihi ? totPrvExp - totPrvKei : totPrvExp;
+    const dispCurBal = dispCurInc - dispCurExp;
+    const dispPrvBal = dispPrvInc - dispPrvExp;
+
     /* サマリー */
-    document.getElementById('ds-inc').textContent = dfmt(totCurInc);
-    document.getElementById('ds-exp').textContent = dfmt(totCurExp);
+    document.getElementById('ds-inc').textContent = dfmt(dispCurInc);
+    document.getElementById('ds-exp').textContent = dfmt(dispCurExp);
     const bEl = document.getElementById('ds-bal');
-    bEl.textContent = dfmt(totCurBal);
-    bEl.style.color = totCurBal >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-    dSetYoy('ds-inc-yoy', totCurInc, totPrvInc);
-    dSetYoy('ds-exp-yoy', totCurExp, totPrvExp);
-    dSetYoy('ds-bal-yoy', totCurBal, totPrvBal);
+    bEl.textContent = dfmt(dispCurBal);
+    bEl.style.color = dispCurBal >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+    dSetYoy('ds-inc-yoy', dispCurInc, dispPrvInc);
+    dSetYoy('ds-exp-yoy', dispCurExp, dispPrvExp);
+    dSetYoy('ds-bal-yoy', dispCurBal, dispPrvBal);
 
     /* 支出マップ */
     const curClsMap={}, prvClsMap={}, curCatMap={}, prvCatMap={}, catsByCls={};
@@ -1443,19 +1495,7 @@ function dashRender() {
         const k=cls+'||'+cat; prvCatMap[k]=(prvCatMap[k]||0)+r.amount;
     });
 
-    /* 経費マップ */
-    const curKeiCls = dSumGroup(curExpKei,'class');
-    const prvKeiCls = dSumGroup(prvExpKei,'class');
-    const totCurKei = Object.values(curKeiCls).reduce((s,v)=>s+v,0);
-    const totPrvKei = Object.values(prvKeiCls).reduce((s,v)=>s+v,0);
-    const maxKei = Math.max(...Object.values(curKeiCls),1);
-
     const maxCat = Math.max(...Object.values(curCatMap),1);
-
-    /* 収入マップ */
-    const curIncType = dSumGroup(curInc,'type');
-    const prvIncType = dSumGroup(prvInc,'type');
-    const maxInc = Math.max(...Object.values(curIncType),1);
 
     /* 期間ラベル */
     const [y, m] = dashYM.split('-').map(Number);
@@ -1513,7 +1553,7 @@ function dashRender() {
     });
 
     /* 経費 */
-    if (totCurKei > 0 || totPrvKei > 0) {
+    if (!dashExcludeKeihi && (totCurKei > 0 || totPrvKei > 0)) {
         const kCollapsed = !!dashCollapseState['__kei__'];
         const kYStr = dyoyStr(totCurKei,totPrvKei);
         const kYCls = dyoyCls(totCurKei,totPrvKei);
@@ -1558,7 +1598,8 @@ function dashRender() {
     }
 
     /* 収入 */
-    const incTypes = [...new Set([...Object.keys(curIncType),...Object.keys(prvIncType)])].sort((a,b)=>(curIncType[b]||0)-(curIncType[a]||0));
+    const allIncTypes = [...new Set([...Object.keys(curIncType),...Object.keys(prvIncType)])].sort((a,b)=>(curIncType[b]||0)-(curIncType[a]||0));
+    const incTypes = dashExcludeKeihi ? allIncTypes.filter(t => t !== '副業') : allIncTypes;
     if (incTypes.length > 0) {
         h += `<div class="dash-sec-label">収　入</div>`;
         h += `<div class="dash-inc-group">`;
@@ -1570,7 +1611,7 @@ function dashRender() {
               <div class="dash-inc-type">${type}</div>
               <div class="dash-bar-wrap"><div class="dash-bar-bg">
                 <div class="dash-bar-fill" style="width:${pct}%;background:linear-gradient(to right,${D_INC_GRAD[0]},${D_INC_GRAD[1]})"></div>
-                <div class="dash-bar-amt" style="color:var(--accent-green)">${dfmt(cur)}</div>
+                <div class="dash-bar-amt">${dfmt(cur)}</div>
               </div></div>
               <div class="dash-yoy-cell ${yC}">${yS}</div>
             </div>`;
@@ -1588,6 +1629,12 @@ function dashToggleCls(cls, hdEl) {
     body.style.display = isOpen ? 'none' : '';
     chev.classList.toggle('open', !isOpen);
     dashCollapseState[cls] = isOpen;
+}
+
+function dashToggleExc() {
+    dashExcludeKeihi = !dashExcludeKeihi;
+    document.getElementById('dashExcBtn').classList.toggle('active', dashExcludeKeihi);
+    if (dashLoaded) dashRender();
 }
 </script>
 </body>
